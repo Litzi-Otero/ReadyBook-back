@@ -1,5 +1,5 @@
 require("dotenv").config(); // Carga las variables de entorno desde .env
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("../firebase");
 const speakeasy = require("speakeasy");
