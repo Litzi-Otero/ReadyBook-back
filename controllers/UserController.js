@@ -1,6 +1,7 @@
 // controllers/UserController.js
 const db = require("../firebase");
-const bcrypt = require("bcrypt");
+//const bcrypt = require("bcrypt");
+const bcrypt = require('bcryptjs');
 const nodemailer = require("nodemailer");
 
 const createUser = async (req, res) => {
