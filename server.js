@@ -2,7 +2,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const { registerUser, loginUser, verifyMFA, verifyRegisterMFA, requestPasswordReset, resetPassword } = require("./controllers/authController");
+const { registerUser, loginUser, verifyMFA, verifyRegisterMFA, requestPasswordReset, resetPassword, generateMFAQR,requestMFAQRTempCode } = require("./controllers/authController");
 const { createUser, getUsers, updateUser, deleteUser, updateProfile, verifyProfileMFA } = require("./controllers/UserController");
 const { getReservedBooks, reserveBook, getReservedUserBooks, addToWaitingList, getWaitingListBooks, cancelReservation, cancelWaitingList } = require("./controllers/booksController");
 
@@ -46,6 +46,8 @@ app.post("/auth/login", loginUser);
 app.post("/auth/verify-mfa", verifyMFA);
 app.post("/auth/password-reset-request", requestPasswordReset);
 app.post("/auth/password-reset", resetPassword);
+app.post("/auth/generate-mfa-qr", generateMFAQR);
+app.post("/auth/request-mfa-qr-code", requestMFAQRTempCode);
 
 app.get("/reserved-books", getReservedBooks);
 app.post("/books/reserve", (req, res) => reserveBook(req, res, notifyClients));
