@@ -303,4 +303,122 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, verifyRegisterMFA, verifyMFA, requestPasswordReset, resetPassword };
+const requestMFAQRTempCode = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: "Email es requerido" });
+  }
+
+  try {
+    const userSnapshot = await db.collection("users").where("email", "==", email).get();
+    if (userSnapshot.empty) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    let user;
+    userSnapshot.forEach((doc) => {
+      user = { id: doc.id, ...doc.data() };
+    });
+
+   
+    const tempCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const tempCodeData = {
+      code: tempCode,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000), 
+      email,
+      type: "mfa_qr_recovery",
+    };
+
+    await db.collection("mfa_codes").doc(email).set(tempCodeData);
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Código para Recuperar tu MFA",
+      text: `Se ha solicitado un código QR para recuperar tu MFA. Usa este código temporal: ${tempCode}. Expira en 5 minutos. Si no solicitaste esto, por favor contacta al soporte.`,
+    });
+
+    res.status(200).json({
+      message: "Código temporal enviado al correo",
+      email,
+    });
+  } catch (error) {
+    console.error("Error al solicitar código temporal para MFA QR:", error.message, error.stack);
+    res.status(500).json({ error: "Error interno en el servidor", message: error.message });
+  }
+};
+
+const generateMFAQR = async (req, res) => {
+  const { email, tempCode } = req.body;
+
+  if (!email || !tempCode) {
+    return res.status(400).json({ error: "Email y código temporal son requeridos" });
+  }
+
+  try {
+    const tempCodeDoc = await db.collection("mfa_codes").doc(email).get();
+    if (!tempCodeDoc.exists) {
+      return res.status(400).json({ error: "Código temporal no encontrado" });
+    }
+
+    const tempCodeData = tempCodeDoc.data();
+    if (tempCodeData.type !== "mfa_qr_recovery" || tempCodeData.code !== tempCode) {
+      return res.status(400).json({ error: "Código temporal incorrecto" });
+    }
+
+    if (new Date() > new Date(tempCodeData.expiresAt)) {
+      return res.status(400).json({ error: "Código temporal expirado" });
+    }
+
+    const userSnapshot = await db.collection("users").where("email", "==", email).get();
+    if (userSnapshot.empty) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    let user;
+    userSnapshot.forEach((doc) => {
+      user = { id: doc.id, ...doc.data() };
+    });
+
+    let mfaSecret = user.mfaSecret;
+    if (!mfaSecret || mfaSecret.trim() === "") {
+      mfaSecret = speakeasy.generateSecret({ name: `EventApp (${email})` }).base32;
+      await db.collection("users").doc(user.id).update({
+        mfaSecret,
+        updatedAt: new Date(),
+      });
+    }
+
+    const otpauthUrl = speakeasy.otpauthURL({
+      secret: mfaSecret,
+      label: `EventApp (${email})`,
+      issuer: "EventApp",
+      encoding: "base32",
+    });
+
+    const qrDataURL = await qrcode.toDataURL(otpauthUrl);
+
+    await db.collection("mfa_codes").doc(email).delete();
+
+    res.status(200).json({
+      message: "Código QR generado exitosamente",
+      qr: qrDataURL,
+      email,
+    });
+  } catch (error) {
+    console.error("Error al generar código QR:", error.message, error.stack);
+    res.status(500).json({ error: "Error interno en el servidor", message: error.message });
+  }
+};
+
+module.exports = { registerUser, loginUser, verifyRegisterMFA, verifyMFA, requestPasswordReset, resetPassword, requestMFAQRTempCode, generateMFAQR };
